@@ -55,9 +55,8 @@ class AdaBoost:
         #signals.emit(int(100))
         return
 
-    def predict(self, signals, signal_text):
+    def score(self, signals, signal_text):
         signals.emit(0)
-
         try:
             for i in range(len(self.clf)):
                 result = self.clf[list(self.clf.keys())[i]].score(self.Xtesting[list(self.clf.keys())[i]]
@@ -73,43 +72,3 @@ class AdaBoost:
 
     def sety(self, y):
         self.ytesting = y
-
-    def getScore(self, mod='st'):
-        res = []
-        if mod == 'st':
-            for dfct in self.defects:
-                counte1=0
-                a = self.clf[dfct].predict(self.Xtesting[dfct])
-                for i in range(len(self.Xtesting[dfct])):
-                    if a[i]==self.ytesting[dfct][i]:
-                        counte1+=1
-                res.append(counte1/len(self.Xtesting[dfct]))
-            return res
-        elif mod == 'e1':
-            counte1 = 0
-            counter = 0
-            for dfct in self.defects:
-                a=self.clf[dfct].predict(self.Xtesting[dfct])
-                for i in range(len(a)):
-                    if self.ytesting[dfct][i] == 0 and a[i] == 1:
-                        counte1 += 1
-                    if self.ytesting[dfct][i] != a[i]:
-                        counter+=1
-                res.append(counte1/max(counter,1),counte1)
-            return res
-        elif mod == 'e2':
-            for dfct in self.defects:
-                counte2 = 0
-                counter = 0
-                a = self.clf[dfct].predict(self.Xtesting[dfct])
-                for i in range(len(a)):
-                    if self.ytesting[dfct][i] == 1 and a[i] == 0:
-                        counte2 += 1
-                    if self.ytesting[dfct][i] != a[i]:
-                        counter+=1
-                if counter!=0:
-                    res.append((counte2 / max(counter,1), counte2))
-                else: res.append((0,counte2))
-            return res
-        else:
-            return None
