@@ -1,28 +1,34 @@
 import pickle
-from AdaBoost import *
-
+import pandas
+import csv
 
 class File:
     def __init__(self, ui):
         self.ui = ui
 
     # выгрузка данных в файл
-    def dump_data(self, path, data, mod='wb'):
-        with open(path, mod)as f:
-            pickle.dump(data, f)
+    def csv_data(self, path, data, mod='wb'):
+        df = pandas.DataFrame(data)
+        col = list(data.keys())
+        df.to_csv(path, columns=col, sep = ';')
 
     # загрузка данных из файла
     def load_data_from_dump(self, path, mod='rb'):
         with open(path, mod) as f:
             return pickle.load(f)
 
+    # загрузка модели в файла
+    def dump_model(self, path, data):
+        with open(path, 'wb')as f:
+            pickle.dump(data, f)
+
     # сохранение промышленных данных в файл
     def save_data(self, file_name, df):
-        self.dump_data(file_name, df)
+        self.csv_data(file_name, df)
 
     # сохранение обученной модели в файл
     def save_model(self, file_name):
-        self.dump_data(file_name, self.adaboost)
+        self.dump_model(file_name, self.adaboost)
 
     # загрузка обученной модели из файла
     def load_model(self, file_name, df_size):

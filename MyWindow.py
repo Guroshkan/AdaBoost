@@ -7,6 +7,9 @@ import numpy as np
 import threading
 from PyQt5 import QtCore, QtWidgets
 import matplotlib.pyplot as plt
+from AdaBoost import *
+
+PATH = "C:\\Users\\acer nitro 5\\PycharmProjects\\AdaBoostVisualDemo с библиотеками\\"
 
 
 # запуск функции в отдельном потоке для корректной работы интерфейса
@@ -83,7 +86,8 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.textBrowser_3.append('Точность модели CatBoost для параметра' +
                                      self.ui.comboBoxDefects_3.currentText() +
                                      ' = ' + str(
-            round(catboost.score(self.adaboost.Xtesting[dfct], self.adaboost.ytesting[dfct]) * 100, 2)) + '%')
+                                    round(catboost.score(self.adaboost.Xtesting[dfct],
+                                                         self.adaboost.ytesting[dfct]) * 100, 2)) + '%')
         array = self.adaboost.getScore()
         index = self.defects.index(dfct)
         self.ui.textBrowser_3.append('Точность модели AdaBoost  для параметра ' +
@@ -162,6 +166,8 @@ class MyWin(QtWidgets.QMainWindow):
             return
         dfct = str(self.ui.comboBoxDefects_3.currentText())
         self.ui.comboBoxPairParams_3.clear()
+        if len(dfct) == 0:
+            return
         for i in range(len(self.relations[dfct])):
             self.ui.comboBoxPairParams_3.addItem(
                 str(self.relations[dfct][i][0] + ' ' + str(self.relations[dfct][i][1])))
@@ -288,9 +294,11 @@ class MyWin(QtWidgets.QMainWindow):
 
     # заполнение списка временных задержек
     def set_delays(self, path):
-        self.delay = {}
-        self.delay = pandas.read_excel(path).to_dict()
-
+        try:
+            self.delay = {}
+            self.delay = pandas.read_excel(path).to_dict()
+        except:
+            self.ui.textBrowser_3.append("Не удалось загрузить файл с задержками.")
     # заполнение данных о названии и единицах измерения параметров
     def set_name_unit(self, path):
         try:
@@ -347,11 +355,11 @@ class MyWin(QtWidgets.QMainWindow):
 
     # загрузка промышленных данных
     def load_data(self):
-        fname = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
+        fname = QFileDialog.getOpenFileName(self, 'Open file', PATH)[0]
         if len(fname) == 0:
             return
         try:
-            df = self.file.load_data_from_dump(fname)
+            df = pandas.read_csv(fname, sep=';')
         except:
             try:
                 df = pandas.read_excel(fname)
@@ -417,18 +425,18 @@ class MyWin(QtWidgets.QMainWindow):
         if self.adaboost == 0:
             self.ui.textBrowser_3.append('Обучите модель прежде, чем сохранять.')
             return
-        file_name = QFileDialog.getSaveFileName(self, 'Create file', '/home')[0]
+        file_name = QFileDialog.getSaveFileName(self, 'Create file', PATH)[0]
         if len(file_name) == 0:
             self.ui.textBrowser_3.append('Пустой путь к файлу.')
             return
-        self.file.save_model(file_name)
+        self.file.dump_model(file_name,self.adaboost)
 
     # сохранение промышленных данных в файл
     def save_data(self):
         if len(self.excel_data_df) == 0:
             self.ui.textBrowser_3.append("Нет данных для сохранения.")
             return
-        file_name = QFileDialog.getOpenFileName(self, 'Create file', '/home')[0]
+        file_name = QFileDialog.getOpenFileName(self, 'Create file', PATH)[0]
         if len(file_name) == 0:
             return
         self.file.save_data(file_name, self.excel_data_df)
