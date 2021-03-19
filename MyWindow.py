@@ -82,17 +82,40 @@ class MyWin(QtWidgets.QMainWindow):
         model = CatBoostRegressor(learning_rate=1, depth=2)
         yfit = list(map(int, self.adaboost.yfiting[dfct]))
         catboost = model.fit(self.adaboost.Xfiting[dfct], yfit)
-        res = catboost.predict(self.adaboost.Xtesting[dfct])
+        print(len(self.adaboost.Xfiting[dfct]))
+        print(len(self.adaboost.yfiting[dfct]))
+        print(len(self.adaboost.Xtesting[dfct]))
+        print(len(self.adaboost.ytesting[dfct]))
+        ycat = catboost.predict(self.adaboost.Xtesting[dfct])
+        ycat = [round(x) for x in ycat]
+        yada = self.adaboost.clf[dfct].predict(self.adaboost.Xtesting[dfct])
+        score1 = self.proc.getScore(self.adaboost.ytesting[dfct], ycat, mod='st') * 100
+        score2 = self.proc.getScore(self.adaboost.ytesting[dfct], yada, mod='st') * 100
+        score3 = self.proc.getScore(self.adaboost.ytesting[dfct], ycat, mod='F')
+        score4 = self.proc.getScore(self.adaboost.ytesting[dfct], yada, mod='F')
+        score5 = self.proc.getScore(self.adaboost.ytesting[dfct], ycat, mod='KKM')
+        score6 = self.proc.getScore(self.adaboost.ytesting[dfct], yada, mod='KKM')
         self.ui.textBrowser_3.append('Точность модели CatBoost для параметра' +
                                      self.ui.comboBoxDefects_3.currentText() +
-                                     ' = ' + str(
-                                    round(catboost.score(self.adaboost.Xtesting[dfct],
-                                                         self.adaboost.ytesting[dfct]) * 100, 2)) + '%')
-        array = self.adaboost.getScore()
-        index = self.defects.index(dfct)
+                                     ' = ' + str(round(score1, 2)) + '%')
         self.ui.textBrowser_3.append('Точность модели AdaBoost  для параметра ' +
                                      self.ui.comboBoxDefects_3.currentText() +
-                                     ' = ' + str(round((array[index] * 100), 2)) + '%')
+                                     ' = ' + str(round(score2, 2)) + '%')
+
+        self.ui.textBrowser_3.append('F мера для модели CatBoost для дефекта' +
+                                     self.ui.comboBoxDefects_3.currentText() +
+                                     ' = ' + str(round(score3, 4)))
+
+        self.ui.textBrowser_3.append('F мера для модели AdaBoost для дефекта' +
+                                     self.ui.comboBoxDefects_3.currentText() +
+                                     ' = ' + str(round(score4, 4)))
+        self.ui.textBrowser_3.append('KKM мера для модели CatBoost для дефекта' +
+                                     self.ui.comboBoxDefects_3.currentText() +
+                                     ' = ' + str(round(score5, 4)))
+        self.ui.textBrowser_3.append('KKM мера для модели AdaBoost для дефекта' +
+                                     self.ui.comboBoxDefects_3.currentText() +
+                                     ' = ' + str(round(score6, 4)))
+
         signal.emit(100)
         self.disabled(False)
 
@@ -359,7 +382,8 @@ class MyWin(QtWidgets.QMainWindow):
         if len(fname) == 0:
             return
         try:
-            df = pandas.read_csv(fname, sep=';')
+            df = pandas.read_csv(fname, sep=';').to_dict()
+            print(list(df.keys()))
         except:
             try:
                 df = pandas.read_excel(fname)
@@ -368,6 +392,7 @@ class MyWin(QtWidgets.QMainWindow):
                 return
         self.set_name_unit(self.ui.lineEditUnitNameExcelPath_3.text())
         params = list(self.name_unit.keys())
+        print(params)
         self.x = []
         self.y = {}
         self.defects = []
@@ -385,8 +410,8 @@ class MyWin(QtWidgets.QMainWindow):
                 self.excel_data_df[self.params[i][0]] = self.proc.build_list(
                     self.excel_data_df[self.params[i][0]])
             for i in range(len(self.defects)):
-                self.y[self.defects[i]] = np.array(
-                    self.proc.delete_nan(list(self.excel_data_df[self.defects[i]])))
+                self.y[self.defects[i]] = self.proc.build_list(
+                    self.excel_data_df[self.defects[i]])
             self.set_delays(self.ui.lineEditDelaysExcelPath_3.text())
         except:
             self.ui.textBrowser_3.append("Неверное содержание файла с данными.")
@@ -409,7 +434,7 @@ class MyWin(QtWidgets.QMainWindow):
 
     # загрузка обученной модели из файла
     def load_model(self):
-        file_name = QFileDialog.getOpenFileName(self, 'Open file', '/home')[0]
+        file_name = QFileDialog.getOpenFileName(self, 'Open file', PATH)[0]
         if len(file_name) == 0:
             self.ui.textBrowser_3.append('Пустой путь к файлу.')
             return

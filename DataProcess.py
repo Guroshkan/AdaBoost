@@ -46,12 +46,13 @@ class DataProcess:
     def build_list(self, array):
         res = []
         for i in range(len(array)):
-            if array[i] == '               ':
+            if i>3500:
+                q = array[i]
+            if array[i] == '               ' or str(array[i]) == 'nan' or array[i] == float('nan'):
                 res.append(np.float64('nan'))
-            elif str(array[i]) == 'nan':
-                continue
             else:
-                res.append(np.float64(array[i]))
+
+                res.append(np.float64(str(array[i]).replace(',', '.')))
         res = np.array(res)
         value = 0
         for i in range(len(res)):
@@ -64,3 +65,45 @@ class DataProcess:
             else:
                 value = res[i]
         return res
+
+    def getScore(self, expert, model, mod='F', betta=1):
+
+        if mod == 'st':
+            count = 0
+            for i in range(len(expert)):
+                if model[i] == expert[i]:
+                    count += 1
+            return count/len(expert)
+        elif mod == 'e1':
+            count = 0
+            for i in range(len(expert)):
+                if model[i] == 1 and expert[i] == 0:
+                    count += 1
+            return count / len(expert), count
+        elif mod == 'e2':
+            count = 0
+            for i in range(len(expert)):
+                if model[i] == 0 and expert[i] == 1:
+                    count += 1
+            return count / len(expert), count
+        elif mod == 'F' or mod == 'KKM':
+            TP = TN = FP = FN = 0
+            for i in range(len(expert)):
+                if model[i] == 0 and expert[i] == 0:
+                    TN += 1
+                if model[i] == 0 and expert[i] == 1:
+                    FN += 1
+                if model[i] == 1 and expert[i] == 0:
+                    FP += 1
+                if model[i] == 1 and expert[i] == 1:
+                    TP += 1
+            precision = TP / (TP+FP)
+            recall = TP / (TP+FN)
+            if mod =='F':
+                F = (betta**2+1)*(precision*recall)/(precision+recall)
+                return F
+            elif mod == 'KKM':
+                KKM = (TP*TN-FP*FN)/((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))**0.5
+                return KKM
+        else:
+            return None
