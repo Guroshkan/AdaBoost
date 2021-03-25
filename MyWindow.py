@@ -1,15 +1,13 @@
 from design import *
 from DataProcess import *
 from File import *
-import pandas
-from PyQt5.QtWidgets import QFileDialog
-import numpy as np
 import threading
 from PyQt5 import QtCore, QtWidgets
 import matplotlib.pyplot as plt
 from AdaBoost import *
-
-PATH = "C:\\Users\\acer nitro 5\\PycharmProjects\\AdaBoostVisualDemo с библиотеками\\"
+from DataReader import *
+import datetime as dt
+from catboost import CatBoostRegressor
 
 
 # запуск функции в отдельном потоке для корректной работы интерфейса
@@ -32,8 +30,6 @@ class MyWin(QtWidgets.QMainWindow):
         self.ui.setupUi(self)
         self.defects = []  # список дефектов
         self.params = []  # список входных параметров и управляющих воздействий
-        self.name_unit = {}  # данные по названию и единицам измерения
-        self.relations = {}  # данные по зависимости дефекта от воздействий
         self.excel_data_df = {}  # датафрейм из файла excel
         self.delay = {}  # данные по задержкам
         self.x = []  # данные, подготовленные для обучения модели
@@ -41,80 +37,77 @@ class MyWin(QtWidgets.QMainWindow):
         self.adaboost = 0  # сама модель адаптивного бустинга
         self.proc = DataProcess()  # класс для обработки данных
         self.file = File(self.ui)  # класс для работы с файлами
+        self.limits = {}  # критические значени
 
         # подключение кнопок и сигналов
-        self.ui.LoadButton_3.clicked.connect(self.load_data)
-        self.ui.FitButton_3.clicked.connect(lambda: self.fit_model(self.signal_progress_bar))
-        self.ui.predictButton_3.clicked.connect(lambda: self.score(self.signal_progress_bar, self.signal_text))
-        self.ui.Plot3d_3.clicked.connect(lambda: self.plot3d(self.signal_graph, self.signal_progress_bar))
-        self.ui.saveModelButton_3.clicked.connect(self.save_model)
-        self.ui.loadModelButton_4.clicked.connect(self.load_model)
-        self.ui.testModelButton.clicked.connect(lambda: self.test_model(self.signal_progress_bar, self.signal_text))
-        self.signal_progress_bar.connect(self.SignalHandlerUpdateProgBar, QtCore.Qt.QueuedConnection)
-        self.signal_graph.connect(self.SignalHandlerUpdateGraph, QtCore.Qt.QueuedConnection)
-        self.signal_text.connect(self.signalHandlerTextBrowserUpdate, QtCore.Qt.QueuedConnection)
+        self.ui.LoadButton.clicked.connect(self.load_data)
+        self.ui.FitButton.clicked.connect(lambda: self.fit_model(self.signal_progress_bar))
+        self.ui.predictButton.clicked.connect(lambda: self.score(self.signal_progress_bar))
+        self.ui.Plot3d.clicked.connect(lambda: self.plot3d(self.signal_graph, self.signal_progress_bar))
+        self.ui.ROCButton.clicked.connect(self.roc_curve)
+        self.ui.trendButton.clicked.connect(self.trends)
+        self.ui.testModelButton.clicked.connect(lambda: self.test_model(self.signal_progress_bar))
+        self.signal_progress_bar.connect(self.sh_update_prog_bar)
+        self.signal_graph.connect(self.sh_update_graph)
+        self.signal_text.connect(self.sh_text_browser_update)
         self.ui.setParamsButton.clicked.connect(self.set_parametrs)
-        self.ui.saveDataButton_3.clicked.connect(self.save_data)
-        self.ui.comboBoxDefects_3.currentTextChanged.connect(self.combo_box_changed_event)
-        self.ui.spinBoxParam1_3.textChanged.connect(self.spin_box_changed_event)
-        self.ui.spinBoxParam2_3.textChanged.connect(self.spin_box_changed_event)
-        self.ui.lineEditRelationsPath.textChanged.connect(self.line_edit_relations_path)
-        self.ui.lineEditUnitNameExcelPath_3.textChanged.connect(self.line_edit_unitname_path)
-        self.ui.lineEditDelaysExcelPath_3.textChanged.connect(self.line_edit_delays_path)
-        self.ui.progressBar_3.setValue(0)
+        self.ui.spinBoxParam1.textChanged.connect(self.spin_box_changed_event)
+        self.ui.spinBoxParam2.textChanged.connect(self.spin_box_changed_event)
 
-        self.ui.labelParam1_3.setStyleSheet("background-color: lightblue")
-        self.ui.labelParam2_3.setStyleSheet("background-color: lightyellow")
-        self.ui.predictButton_3.setDisabled(True)
-        self.ui.Plot3d_3.setDisabled(True)
+        self.ui.progressBar.setValue(0)
+        self.ui.labelParam1.setStyleSheet("background-color: lightblue")
+        self.ui.labelParam2.setStyleSheet("background-color: lightyellow")
+        self.ui.predictButton.setDisabled(True)
+        self.ui.Plot3d.setDisabled(True)
+        self.ui.ROCButton.setDisabled(True)
+        self.ui.trendButton.setDisabled(True)
+        self.ui.testModelButton.setDisabled(True)
+        self.ui.FitButton.setDisabled(True)
 
     # сравнение моделей AdaBoost и CatBoost
     @thread
-    def test_model(self, signal, signal_text):
+    def test_model(self, signal):
         self.disabled(True)
         signal.emit(0)
+        defect = self.ui.comboBoxDefects.currentText()
         if self.adaboost == 0:
-            self.ui.textBrowser_3.append('Сначала обучите модель.')
+            self.ui.textBrowser.append('Сначала обучите модель.')
             self.disabled(False)
             return
-        dfct = self.ui.comboBoxDefects_3.currentText()
-        from catboost import CatBoostRegressor
-        model = CatBoostRegressor(learning_rate=1, depth=2)
-        yfit = list(map(int, self.adaboost.yfiting[dfct]))
-        catboost = model.fit(self.adaboost.Xfiting[dfct], yfit)
-        print(len(self.adaboost.Xfiting[dfct]))
-        print(len(self.adaboost.yfiting[dfct]))
-        print(len(self.adaboost.Xtesting[dfct]))
-        print(len(self.adaboost.ytesting[dfct]))
-        ycat = catboost.predict(self.adaboost.Xtesting[dfct])
+        if self.adaboost.defect != defect:
+            self.ui.textBrowser.append('Модель не обучена для этого параметра.')
+            self.disabled(False)
+            return
+
+        model = CatBoostRegressor(learning_rate=1, depth=2, random_state=int(random.random() * 999999999))
+        yfit = list(map(int, self.adaboost.yfiting))
+        catboost = model.fit(self.adaboost.Xfiting, yfit)
+        print(len(self.adaboost.Xfiting))
+        print(len(self.adaboost.yfiting))
+        print(len(self.adaboost.Xtesting))
+        print(len(self.adaboost.ytesting))
+        ycat = catboost.predict(self.adaboost.Xtesting)
         ycat = [round(x) for x in ycat]
-        yada = self.adaboost.clf[dfct].predict(self.adaboost.Xtesting[dfct])
-        score1 = self.proc.getScore(self.adaboost.ytesting[dfct], ycat, mod='st') * 100
-        score2 = self.proc.getScore(self.adaboost.ytesting[dfct], yada, mod='st') * 100
-        score3 = self.proc.getScore(self.adaboost.ytesting[dfct], ycat, mod='F')
-        score4 = self.proc.getScore(self.adaboost.ytesting[dfct], yada, mod='F')
-        score5 = self.proc.getScore(self.adaboost.ytesting[dfct], ycat, mod='KKM')
-        score6 = self.proc.getScore(self.adaboost.ytesting[dfct], yada, mod='KKM')
-        self.ui.textBrowser_3.append('Точность модели CatBoost для параметра' +
-                                     self.ui.comboBoxDefects_3.currentText() +
-                                     ' = ' + str(round(score1, 2)) + '%')
-        self.ui.textBrowser_3.append('Точность модели AdaBoost  для параметра ' +
-                                     self.ui.comboBoxDefects_3.currentText() +
-                                     ' = ' + str(round(score2, 2)) + '%')
+        yada = self.adaboost.clf.predict(self.adaboost.Xtesting)
+        score_cat = self.proc.getScore(self.adaboost.ytesting, ycat, mod='st') * 100
+        score_ada = self.proc.getScore(self.adaboost.ytesting, yada, mod='st') * 100
+        score_cat_f = self.proc.getScore(self.adaboost.ytesting, ycat, mod='F') * 100
+        score_ada_f = self.proc.getScore(self.adaboost.ytesting, yada, mod='F') * 100
+        score_cat_kkm = self.proc.getScore(self.adaboost.ytesting, ycat, mod='KKM') * 100
+        score_ada_kkm = self.proc.getScore(self.adaboost.ytesting, yada, mod='KKM') * 100
+        self.ui.textBrowser.append('Точность модели CatBoost для параметра' +
+                                   defect + ' = ' + str(round(score_cat, 2)) + '%')
+        self.ui.textBrowser.append('Точность модели AdaBoost  для параметра ' +
+                                   defect + ' = ' + str(round(score_cat_f, 2)) + '%')
+        self.ui.textBrowser.append('F мера для модели CatBoost для дефекта' +
+                                   defect + ' = ' + str(round(score_cat_kkm, 2)))
 
-        self.ui.textBrowser_3.append('F мера для модели CatBoost для дефекта' +
-                                     self.ui.comboBoxDefects_3.currentText() +
-                                     ' = ' + str(round(score3, 4)))
-
-        self.ui.textBrowser_3.append('F мера для модели AdaBoost для дефекта' +
-                                     self.ui.comboBoxDefects_3.currentText() +
-                                     ' = ' + str(round(score4, 4)))
-        self.ui.textBrowser_3.append('KKM мера для модели CatBoost для дефекта' +
-                                     self.ui.comboBoxDefects_3.currentText() +
-                                     ' = ' + str(round(score5, 4)))
-        self.ui.textBrowser_3.append('KKM мера для модели AdaBoost для дефекта' +
-                                     self.ui.comboBoxDefects_3.currentText() +
-                                     ' = ' + str(round(score6, 4)))
+        self.ui.textBrowser.append('F мера для модели AdaBoost для дефекта' +
+                                   defect + ' = ' + str(round(score_ada, 2)))
+        self.ui.textBrowser.append('KKM мера для модели CatBoost для дефекта' +
+                                   defect + ' = ' + str(round(score_ada_f, 2)))
+        self.ui.textBrowser.append('KKM мера для модели AdaBoost для дефекта' +
+                                   defect + ' = ' + str(round(score_ada_kkm, 2)))
 
         signal.emit(100)
         self.disabled(False)
@@ -123,120 +116,96 @@ class MyWin(QtWidgets.QMainWindow):
     @thread
     def fit_model(self, signal):
         self.disabled(True)
-        if len(self.excel_data_df) == 0 or len(self.name_unit) == 0 or len(self.delay) == 0 or len(self.relations) == 0:
-            self.ui.textBrowser_3.append('Загрузите данные для начала работы')
+        if len(self.excel_data_df) == 0:
+            self.ui.textBrowser.append('Загрузите данные для начала работы.')
             self.disabled(False)
             return
-        clf = AdaBoost(self.x, self.y, self.defects, self.params, self.ui.spinBoxEmumerator_3.value())
+        if len(self.defects) == 0:
+            self.ui.textBrowser.append("Данных недостаточно для прогнозирования.")
+            self.disabled(False)
+            return
+        defect = self.ui.comboBoxDefects.currentText()
+        clf = AdaBoost(self.x, self.y[defect], defect, self.limits, self.ui.spinBoxEmumerator.value())
         clf.fit(signals=signal)
-        self.ui.textBrowser_3.append('Модель обучена.')
-        self.ui.predictButton_3.setDisabled(False)
-        self.ui.Plot3d_3.setDisabled(False)
+        self.ui.textBrowser.append('Модель для параметра %(defect)s обучена.' % {"defect": defect})
+        self.ui.predictButton.setDisabled(False)
+        self.ui.Plot3d.setDisabled(False)
+        self.ui.ROCButton.setDisabled(False)
+        self.ui.trendButton.setDisabled(False)
+        self.ui.testModelButton.setDisabled(False)
         self.disabled(False)
         self.adaboost = clf
 
     # данные о точности модели AdaBoost
     @thread
-    def score(self, progressbar, text):
+    def score(self, progressbar):
         self.disabled(True)
         progressbar.emit(0)
-        if self.adaboost == 0 or len(self.excel_data_df) == 0 or len(self.name_unit) == 0 or \
-                len(self.delay) == 0 or len(self.relations) == 0:
-            text.emit('Fit model first')
+        defect = self.ui.comboBoxDefects.currentText()
+        if self.adaboost == 0:
+            self.ui.textBrowser.append('Сначала обучите модель.')
+            self.disabled(False)
             return
-        try:
-            ycalc = self.adaboost.getScore()
-            for i in range(len(self.defects)):
-                text.emit('Для дефекта' + self.defects[i] +
-                          ' точность прогнозирования составляет ' +
-                          str(round(ycalc[i] * 100, 2)) + '%')
-            text.emit('Из них ошибок 2 рода:')
-            ycalc = self.adaboost.getScore(mod='e2')
-            for i in range(len(self.defects)):
-                self.ui.textBrowser_3.append('Для дефекта' + self.defects[i] +
-                                             ' ошибки второго рода составляют ' +
-                                             str(round(ycalc[i][0] * 100, 2)) + '% количество: ' + str(ycalc[i][1]))
+        if self.adaboost.defect != defect:
+            self.ui.textBrowser.append('Модель не обучена для этого параметра.')
+            self.disabled(False)
+            return
 
-            text.emit('Прогнозирование завершено.')
-        except:
-            text.emit('Неверный формат выборок.')
+        yada = self.adaboost.clf.predict(self.adaboost.Xtesting)
+        score = self.proc.getScore(self.adaboost.ytesting, yada, mod='st') * 100
+        score_f = self.proc.getScore(self.adaboost.ytesting, yada, mod='F') * 100
+        score_kkm = self.proc.getScore(self.adaboost.ytesting, yada, mod='KKM') * 100
+        self.ui.textBrowser.append('Точность модели AdaBoost  для параметра ' +
+                                   defect + ' = ' + str(round(score, 2)) + '%')
+        self.ui.textBrowser.append('F мера для модели AdaBoost для дефекта' +
+                                   defect + ' = ' + str(round(score_f, 2)))
+        self.ui.textBrowser.append('KKM мера для модели AdaBoost для дефекта' +
+                                   defect + ' = ' + str(round(score_kkm, 2)))
         progressbar.emit(100)
         self.disabled(False)
-
-    # загрузка задержек по пути, который хранится в lineEditDelaysExcelPath_3
-    def line_edit_delays_path(self):
-        try:
-            self.set_delays(self.ui.lineEditDelaysExcelPath_3.text())
-        except:
-            self.ui.predictButton_3.setDisabled(True)
-            self.ui.Plot3d_3.setDisabled(True)
-
-    # загрузка данных о названии и единицах измерения по пути, который хранится в lineEditUnitNameExcelPath_3
-    def line_edit_unitname_path(self):
-        self.set_name_unit(self.ui.lineEditUnitNameExcelPath_3.text())
-
-    # загрузка данных о зависимостях по пути lineEditRelationsPath
-    def line_edit_relations_path(self):
-        self.buildrelationmap()
 
     # блокировка/разблокировка элементов управления
     def disabled(self, mod):
         self.ui.frame_19.setDisabled(mod)
 
-    # вывод параметров от которых зависит дефект
-    def combo_box_changed_event(self):
-        if len(self.relations) == 0:
-            return
-        dfct = str(self.ui.comboBoxDefects_3.currentText())
-        self.ui.comboBoxPairParams_3.clear()
-        if len(dfct) == 0:
-            return
-        for i in range(len(self.relations[dfct])):
-            self.ui.comboBoxPairParams_3.addItem(
-                str(self.relations[dfct][i][0] + ' ' + str(self.relations[dfct][i][1])))
-
     # вывод данных о названии параметров, единицах измерения и границ варьирования
     def spin_box_changed_event(self):
-        if len(self.name_unit) == 0:
-            self.ui.textBrowser_3.append("Единицы измерения еще не загружены.")
-            return
-        i = int(self.ui.spinBoxParam1_3.value())
-        j = int(self.ui.spinBoxParam2_3.value())
-        self.ui.labelParam1_3.setText(str(self.name_unit[self.params[i][0]][2]))
-        self.ui.labelParam2_3.setText(str(self.name_unit[self.params[j][0]][2]))
-        minx = min(self.excel_data_df[self.params[i][0]])
-        minx = minx if minx >= 0 else 0.0
-        maxx = max(self.excel_data_df[self.params[i][0]])
-        miny = min(self.excel_data_df[self.params[j][0]])
-        miny = miny if miny >= 0 else 0.0
-        maxy = max(self.excel_data_df[self.params[j][0]])
-        self.ui.labelIntervalParam1_3.setText(str('[ ' + str(round(minx, 2)) + ' ;' + str(round(maxx, 2)) + ']'))
-        self.ui.labelIntervalParam2_3.setText(str('[ ' + str(round(miny, 2)) + ' ;' + str(round(maxy, 2)) + ']'))
+        i = int(self.ui.spinBoxParam1.value())
+        j = int(self.ui.spinBoxParam2.value())
+        self.ui.labelParam1.setText(str(self.params[i][0]))
+        self.ui.labelParam2.setText(str(self.params[j][0]))
+        mini = self.limits[self.params[i][0]][0]
+        mini = mini if mini >= 0 else 0.0
+        maxi = self.limits[self.params[i][0]][1]
+        minj = self.limits[self.params[j][0]][0]
+        minj = minj if minj >= 0 else 0.0
+        maxj = self.limits[self.params[j][0]][1]
+        self.ui.labelIntervalParam1.setText(str('[ ' + str(round(mini, 2)) + ' ;' + str(round(maxi, 2)) + ']'))
+        self.ui.labelIntervalParam2.setText(str('[ ' + str(round(minj, 2)) + ' ;' + str(round(maxj, 2)) + ']'))
 
-        self.ui.labelUnit1_3.setText('[ ' + str(self.name_unit[self.params[i][0]][0]) + ']')
-        self.ui.labelUnit2_3.setText('[ ' + str(self.name_unit[self.params[j][0]][0]) + ']')
+        self.ui.labelUnit1.setText('[ ' + str(self.params[i][0]) + ']')
+        self.ui.labelUnit2.setText('[ ' + str(self.params[j][0]) + ']')
 
     # сигнал для обновления progress bar
-    def SignalHandlerUpdateProgBar(self, data):
-        print(data)
-        self.ui.progressBar_3.setValue(int(data))
+    def sh_update_prog_bar(self, data):
+        self.ui.progressBar.setValue(int(data))
 
     # сигнал для вывода текста
-    def signalHandlerTextBrowserUpdate(self, data):
+    def sh_text_browser_update(self, data):
         if len(data) > 0:
-            self.ui.textBrowser_3.append(data)
+            self.ui.textBrowser.append(data)
 
     # сигнал для вывода графика
-    def SignalHandlerUpdateGraph(self, data):
+    def sh_update_graph(self, data):
         fig = plt.figure()
         ax = fig.gca(projection='3d')
         ax.set_xlim([data[7][0], data[7][1]])
         ax.set_ylim([data[7][2], data[7][3]])
         ax.scatter(data[0], data[1], 0, c='b', marker='o')
         ax.scatter(data[2], data[3], 1, c='r', marker='+')
-        ax.set_xlabel(self.ui.labelParam1_3.text() + ', ' + str(self.ui.labelUnit1_3.text()))
-        ax.set_ylabel(self.ui.labelParam2_3.text() + ', ' + str(self.ui.labelUnit2_3.text()))
-        ax.set_zlabel(self.ui.comboBoxDefects_3.currentText())
+        ax.set_xlabel(self.ui.labelParam1.text() + ', ' + str(self.ui.labelUnit1.text()))
+        ax.set_ylabel(self.ui.labelParam2.text() + ', ' + str(self.ui.labelUnit2.text()))
+        ax.set_zlabel(self.ui.comboBoxDefects.currentText())
         plt.show()
 
     # вывод зон показателя качества, зависящих от параметров управляющих воздействий
@@ -244,23 +213,28 @@ class MyWin(QtWidgets.QMainWindow):
     def plot3d(self, signal_graph, signals):
         self.disabled(True)
         signals.emit(0)
-        i = int(self.ui.spinBoxParam1_3.value())
-        j = int(self.ui.spinBoxParam2_3.value())
+        i = int(self.ui.spinBoxParam1.value())
+        j = int(self.ui.spinBoxParam2.value())
 
         if i == j or i >= len(self.params) or j >= len(self.params):
-            self.ui.textBrowser_3.append('Incorrect parametr index.')
+            self.ui.textBrowser.append('Incorrect parametr index.')
             self.disabled(False)
             return
         if j < i:
             i, j = j, i
-        self.ui.spinBoxParam1_3.setValue(i)
-        self.ui.spinBoxParam2_3.setValue(j)
+        self.ui.spinBoxParam1.setValue(i)
+        self.ui.spinBoxParam2.setValue(j)
         if self.adaboost == 0:
-            self.ui.textBrowser_3.append('Fit model first')
+            self.ui.textBrowser.append('Обучите модель для начала.')
             self.disabled(False)
             return
-        dfct = self.defects.index(str(self.ui.comboBoxDefects_3.currentText()))
-        size = self.ui.spinBoxSize_3.value()
+
+        dfct = self.ui.comboBoxDefects.currentText()
+        if self.adaboost.defect != dfct:
+            self.ui.textBrowser.append('Модель не обучена для этого дефекта.')
+            self.disabled(False)
+            return
+        size = self.ui.spinBoxSize.value()
 
         minx = min(self.excel_data_df[self.params[i][0]])
         minx = minx if minx >= 0 else 0.0
@@ -269,9 +243,20 @@ class MyWin(QtWidgets.QMainWindow):
         miny = miny if miny > 0 else 0.0
         maxy = max(self.excel_data_df[self.params[j][0]])
         if minx == maxx or miny == maxy:
-            self.ui.textBrowser_3.append('Parameter constant.')
+            self.ui.textBrowser.append('Parameter constant.')
             self.disabled(False)
             return
+
+        minx = self.limits[self.params[i][0]][0]
+        maxx = self.limits[self.params[i][0]][1]
+        miny = self.limits[self.params[j][0]][0]
+        maxy = self.limits[self.params[j][0]][1]
+
+        if minx == maxx or miny == maxy:
+            self.ui.textBrowser.append('Совпадение границ параметра.')
+            self.disabled(False)
+            return
+
         newx = np.linspace(minx, maxx, size)
         newy = np.linspace(miny, maxy, size)
         itter = 0
@@ -285,27 +270,28 @@ class MyWin(QtWidgets.QMainWindow):
         avg = {}
         for i in range(len(self.params)):
             avg[self.params[i][0]] = float(sum(self.excel_data_df[self.params[i][0]])) / max(
-                len(self.excel_data_df[self.params[i][0]]), 1)
+                len(self.excel_data_df[self.params[i][0]]), 1)  # берем среднее значение по каждому из параметров
 
         for s in range(len(newx)):
             itter += 1
             signals.emit(int(itter / len(newx) * 100))
-            Q = self.x[s]
+            curr = self.x[s]
             for q in range(len(self.params)):
-                Q[q] = avg[self.params[i][0]]
-            Q[i] = newx[s]
-            Q[j] = newy[0]
+                curr[q] = avg[self.params[i][0]]
+            curr[i] = newx[s]
+
             yline.append(self.x[s][j])
-            a = int(self.adaboost.clf[self.defects[dfct]].predict([Q]))
+            curr[j] = newy[0]
+            a = int(self.adaboost.clf.predict([curr]))
             if a == 1:
                 xline1.append(newx[s])
             else:
                 xline0.append(newx[s])
             for l in range(len(newy)):
-                Q = self.x[s]
-                Q[i] = newx[s]
-                Q[j] = newy[l]
-                a = int(self.adaboost.clf[self.defects[dfct]].predict([Q]))
+                curr = self.x[s]
+                curr[i] = newx[s]
+                curr[j] = newy[l]
+                a = int(self.adaboost.clf.predict([curr]))
                 if a == 1:
                     x1.append(newx[s])
                     y1.append(newy[l])
@@ -315,153 +301,153 @@ class MyWin(QtWidgets.QMainWindow):
         signal_graph.emit([x0, y0, x1, y1, xline0, xline1, yline, [minx, maxx, miny, maxy]])
         self.disabled(False)
 
-    # заполнение списка временных задержек
-    def set_delays(self, path):
-        try:
-            self.delay = {}
-            self.delay = pandas.read_excel(path).to_dict()
-        except:
-            self.ui.textBrowser_3.append("Не удалось загрузить файл с задержками.")
-    # заполнение данных о названии и единицах измерения параметров
-    def set_name_unit(self, path):
-        try:
-            self.name_unit = {}
-            self.name_unit = pandas.read_excel(path).to_dict()
-            params = list(self.name_unit.keys())
-            self.ui.comboBoxDefects_3.clear()
-            for i in range(len(self.name_unit)):
-                if params[i].split('.')[0] == 'Defects':
-                    self.defects.append(params[i])
-                    self.ui.comboBoxDefects_3.addItem(str(params[i]))
-                else:
-                    self.params.append((params[i], i))
-        except:
-            self.ui.predictButton_3.setDisabled(True)
-            self.ui.Plot3d_3.setDisabled(True)
+    # построение roc кривой
+    def roc_curve(self):
+        res = self.adaboost.clf.predict_proba(self.adaboost.Xtesting)
+        y = self.adaboost.ytesting
+        res_pos_prob = []
+        for i in range(len(res)):
+            res_pos_prob.append((res[i][1], y[i]))
+        res_pos_prob = sorted(res_pos_prob, key=lambda tup: tup[0], reverse=True)
+        count_of_pos = 0
+        count_of_neg = len(res_pos_prob)
+        for i in range(len(res_pos_prob)):
+            if res_pos_prob[i][1] == 1:
+                count_of_pos += 1
+        count_of_neg -= count_of_pos
+        stepy = 1 / max(count_of_pos, 1)
+        stepx = 1 / max(count_of_neg, 1)
+        yline = []
+        xline = []
+        xcoordline = 0
+        xlinestep = 1 / len(res_pos_prob)
+        ycoord = 0
+        xcoord = 0
+        curvex = []
+        curvey = []
+        s = 0
+        for i in range(len(res_pos_prob)):
+            if res_pos_prob[i][1] == 1:
+                ycoord += stepy  # учет позитивного прогноза
+            else:
+                xcoord += stepx  # учет негативного прогноза
+                s += ycoord * stepx  # расчет площади
+            xcoordline += xlinestep
+            yline.append(xcoord)
+            xline.append(xcoord)
+            curvex.append(xcoord)
+            curvey.append(ycoord)
 
-    # заполнение данных о зависимостях дефектов от параметров
-    def build_relation_map(self):
-        try:
-            rl = pandas.read_excel(self.ui.lineEditRelationsPath.text())
-            relation = {}
-            for i in range(len(rl['Def'])):
-                relation[rl['Def'][i]] = []
-                for j in range(len(rl.columns)):
-                    if rl[rl.columns[j]][i] == '*':
-                        a = rl.columns[j]
-                        b = rl[rl.columns[0]][i]
-                        relation[b].append(a)
-            self.relations = {}
-            for i in range(len(relation)):
-                par = list(relation.keys())[i]
-                self.relations[par] = []
-                if len(relation[par]) >= 2:
-                    for j in range(len(relation[par])):
-                        for k in range(j + 1, len(relation[par])):
-                            self.relations[par].append((relation[par][j], relation[par][k]))
-        except:
-            self.ui.predictButton_3.setDisabled(True)
-            self.ui.Plot3d_3.setDisabled(True)
-            self.ui.textBrowser_3.append("Файл с зависимостей имеет неверный формат.")
+        fig = plt.figure()
+        ax = fig.gca()
+        ax.plot(curvex, curvey, 'o-', c='r')
+        ax.plot(xline, yline, c='g')
+        plt.show()
+        self.ui.textBrowser.append("Площадь под графиком ROC кривой равна " + str(round(s, 4)))
+
+    # построение трендов
+    def trends(self):
+        trend_param = []
+        trend_defect = []
+        trend_predict = []
+        time = []
+        fig, (axParam, axExpertDef, axModelDef) = plt.subplots(3, 1)
+        fig.suptitle('Trends')
+        param = self.params[self.ui.spinBoxParam1.value()][0]
+        defect = self.ui.comboBoxDefects.currentText()
+        predict = self.adaboost.clf.predict(self.x)
+
+        for i in range(len(self.excel_data_df['DateTime'])):
+            trend_param.append(self.excel_data_df[param][i])
+            trend_defect.append(self.excel_data_df[defect][i])
+            trend_predict.append(predict[i])
+            year_month_day = [int(x) for x in self.excel_data_df['DateTime'][i].split(' ')[0].split('-')]
+            hour_min_sec = [int(x) for x in self.excel_data_df['DateTime'][i].split(' ')[1].split(':')]
+            time.append(dt.datetime(year_month_day[0], year_month_day[1], year_month_day[2],
+                                    hour_min_sec[0], hour_min_sec[1], hour_min_sec[2]))  # заполнение массива времени по оси x
+
+        axParam.plot(time, trend_param)
+        axParam.set_ylabel(param)
+        axExpertDef.plot(time, trend_defect)
+        axExpertDef.set_ylabel(defect)
+        axModelDef.plot(time, trend_predict)
+        axModelDef.set_ylabel('predict')
+        axModelDef.set_xlabel('date')
+
+        plt.show()
 
     # заполнение полей исходя из выбора пользователя
     def set_parametrs(self):
-        if len(self.ui.comboBoxPairParams_3.currentText()) <= 0:
-            self.ui.textBrowser_3.append('Select parameters first')
+        if len(self.ui.comboBoxPairParams.currentText()) <= 0:
+            self.ui.textBrowser.append('Select parameters first')
             return
-        par = str.split(self.ui.comboBoxPairParams_3.currentText(), ' ')
+        par = str.split(self.ui.comboBoxPairParams.currentText(), ' ')
         for i in range(len(self.params)):
             if par[0] == self.params[i][0]:
-                self.ui.spinBoxParam1_3.setValue(i)
+                self.ui.spinBoxParam1.setValue(i)
             if par[1] == self.params[i][0]:
-                self.ui.spinBoxParam2_3.setValue(i)
+                self.ui.spinBoxParam2.setValue(i)
 
     # загрузка промышленных данных
     def load_data(self):
-        fname = QFileDialog.getOpenFileName(self, 'Open file', PATH)[0]
-        if len(fname) == 0:
-            return
-        try:
-            df = pandas.read_csv(fname, sep=';').to_dict()
-            print(list(df.keys()))
-        except:
-            try:
-                df = pandas.read_excel(fname)
-            except:
-                self.ui.textBrowser_3.append("Неверный формат данных.")
-                return
-        self.set_name_unit(self.ui.lineEditUnitNameExcelPath_3.text())
-        params = list(self.name_unit.keys())
+        self.excel_data_df, params = db_reader(self.ui.spinBoxCallDBSize.value())
+        self.limits = db_limits()
         print(params)
         self.x = []
         self.y = {}
         self.defects = []
         self.params = []
         try:
-            self.ui.comboBoxDefects_3.clear()
-            for i in range(len(self.name_unit)):
-                self.excel_data_df[params[i]] = df[params[i]]
-                if params[i].split('.')[0] == 'Defects':
-                    self.defects.append(params[i])
-                    self.ui.comboBoxDefects_3.addItem(str(params[i]))
-                else:
-                    self.params.append((params[i], i))
+            self.ui.comboBoxDefects.clear()
+            for i in range(len(params)):
+                try:
+                    if params[i][1].split('.')[0] == 'Defects':
+                        self.defects.append(params[i][1])
+                    else:
+                        self.params.append((params[i][1], i))
+                except:
+                    self.params.append((params[i][1], i))
+
             for i in range(len(self.params)):
                 self.excel_data_df[self.params[i][0]] = self.proc.build_list(
                     self.excel_data_df[self.params[i][0]])
             for i in range(len(self.defects)):
                 self.y[self.defects[i]] = self.proc.build_list(
                     self.excel_data_df[self.defects[i]])
-            self.set_delays(self.ui.lineEditDelaysExcelPath_3.text())
         except:
-            self.ui.textBrowser_3.append("Неверное содержание файла с данными.")
+            self.ui.textBrowser.append("Неверное содержание файла с данными.")
             self.excel_data_df = {}
             return
-        self.x, self.y = self.proc.build_2D_list(self.delay, self.params, self.defects, self.name_unit,
-                                                 self.excel_data_df, self.y)
-        self.build_relation_map()
-        self.ui.spinBoxParam1_3.setMaximum(len(self.params) - 1)
-        self.ui.spinBoxParam2_3.setMaximum(len(self.params) - 1)
+        defect = self.defects
+        i = 0
+        while i < len(self.defects):
+            maxd = max(self.excel_data_df[self.defects[i]])
+            mind = min(self.excel_data_df[self.defects[i]])
+            if maxd == mind:
+                defect.remove(self.defects[i])  # удаление неизменяющихся значений дефектов
+            else:
+                i += 1
+        self.defects = defect
+        while i < len(self.params):
+            maxd = max(self.excel_data_df[self.params[i][0]])
+            mind = min(self.excel_data_df[self.params[i][0]])
+            if maxd == mind:
+                self.params.remove(self.params[i])  # удаление неизменяющихся параметров
+            else:
+                i += 1
+
+        for el in defect:
+            self.ui.comboBoxDefects.addItem(el)
+        self.x, self.y = self.proc.build_2D_list(self.params, self.defects, self.limits, self.excel_data_df, self.y)
+        self.ui.spinBoxParam1.setMaximum(len(self.params) - 1)
+        self.ui.spinBoxParam2.setMinimum(1)
+        self.ui.spinBoxParam2.setMaximum(len(self.params) - 1)
         self.spin_box_changed_event()
 
-        self.ui.progressBar_3.setValue(100)
-        self.ui.textBrowser_3.append('Загрузка данных завершена.')
+        self.ui.progressBar.setValue(100)
+        self.ui.textBrowser.append('Загрузка данных завершена.')
 
         if self.adaboost != 0:
-            self.ui.predictButton_3.setDisabled(False)
-            self.ui.Plot3d_3.setDisabled(False)
-        return
-
-    # загрузка обученной модели из файла
-    def load_model(self):
-        file_name = QFileDialog.getOpenFileName(self, 'Open file', PATH)[0]
-        if len(file_name) == 0:
-            self.ui.textBrowser_3.append('Пустой путь к файлу.')
-            return
-        self.adaboost = self.file.load_model(file_name,len(self.excel_data_df))
-        clf = AdaBoost([], [], [], [])
-        if self.adaboost.__class__ != clf.__class__:
-            self.adaboost = 0
-            return
-        self.ui.textBrowser_3.append("Модель загружена.")
-
-    # сохранение обученной модели в файл
-    def save_model(self):
-        if self.adaboost == 0:
-            self.ui.textBrowser_3.append('Обучите модель прежде, чем сохранять.')
-            return
-        file_name = QFileDialog.getSaveFileName(self, 'Create file', PATH)[0]
-        if len(file_name) == 0:
-            self.ui.textBrowser_3.append('Пустой путь к файлу.')
-            return
-        self.file.dump_model(file_name,self.adaboost)
-
-    # сохранение промышленных данных в файл
-    def save_data(self):
-        if len(self.excel_data_df) == 0:
-            self.ui.textBrowser_3.append("Нет данных для сохранения.")
-            return
-        file_name = QFileDialog.getOpenFileName(self, 'Create file', PATH)[0]
-        if len(file_name) == 0:
-            return
-        self.file.save_data(file_name, self.excel_data_df)
+            self.ui.predictButton.setDisabled(False)
+            self.ui.Plot3d.setDisabled(False)
+        self.ui.FitButton.setDisabled(False)
