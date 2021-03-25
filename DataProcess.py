@@ -1,52 +1,37 @@
-import math
 import numpy as np
 
 
 class DataProcess:
-    # удаление nan значений из списка
-    def delete_nan(self, array):
-        return [x for x in array if str(x) != 'nan']
-
-    # синхронизация данных по времени
-    def synchronization(self, delay, params, defects, df, y):
-        arr = {}
-        delay_step = 10
-        max_delay = 0
-        min_delay = float('inf')
-        for el in delay.values():
-            if el[0] > max_delay:
-                max_delay = el[0]
-            if el[0] < min_delay:
-                min_delay = el[0]
-
-        max_delay = math.ceil(max_delay / delay_step)
-        for i in range(len(params)):
-            q = math.ceil(delay[params[i][0]][0] / delay_step)
-            arr[params[i][0]] = np.array(df[params[i][0]][max_delay - q:-q - min_delay - 1])
-        for i in range(len(defects)):
-            y[defects[i]] = np.array(y[defects[i]][max_delay:-min_delay - 1])
-
-            #size = min(len(arr[0]),len(y[0]))
-            #arr = arr[:size]
-            #y = y[:size]
-        return arr, y
-
     # создание матрицы данных для обучения
-    def build_2D_list(self, delay, params, defect, name_unit, df, y):
-        arr, y = self.synchronization(delay, params, defect, df, y)
+    def build_2D_list(self, params, defect, limit, df, y):
+        arr = {}
+        for i in range(len(params)):
+            arr[params[i][0]] = np.array(df[params[i][0]])
         x = []
         for i in range(len(arr[params[0][0]])):
             xi = []
             for j in range(len(params)):
-                xi.append(max(arr[params[j][0]][i], name_unit[params[j][0]][3]))
+                value = arr[params[j][0]][i]
+                if value < limit[params[j][0]][0]:
+                    value = limit[params[j][0]][0]
+                if value > limit[params[j][0]][1] :
+                    value = limit[params[j][0]][1]
+                xi.append(value)
             x.append(xi)
+
+        for dfct in defect:
+            for i in range(len(y)):
+                if y[dfct][i] < limit[dfct][0]:
+                    y[dfct][i] = limit[defect][0]
+                if y[dfct][i] > limit[dfct][1]:
+                    y[dfct][i] = limit[defect][1]
         return np.array(x), y
 
     # заполнение пропусков данных параметров предыдущими значениями
     def build_list(self, array):
         res = []
         for i in range(len(array)):
-            if i>3500:
+            if i > 3500:
                 q = array[i]
             if array[i] == '               ' or str(array[i]) == 'nan' or array[i] == float('nan'):
                 res.append(np.float64('nan'))
@@ -97,13 +82,20 @@ class DataProcess:
                     FP += 1
                 if model[i] == 1 and expert[i] == 1:
                     TP += 1
-            precision = TP / (TP+FP)
-            recall = TP / (TP+FN)
+
             if mod =='F':
-                F = (betta**2+1)*(precision*recall)/(precision+recall)
-                return F
+                precision = TP / max((TP + FP), 1)
+                recall = TP / max((TP + FN), 1)
+                try:
+                    F = (betta**2+1)*(precision*recall)/(betta**2*precision+recall)
+                    return F
+                except:
+                    return 0
             elif mod == 'KKM':
-                KKM = (TP*TN-FP*FN)/((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))**0.5
-                return KKM
+                try:
+                    KKM = (TP*TN-FP*FN)/((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))**0.5
+                    return KKM
+                except:
+                    return 0
         else:
             return None
