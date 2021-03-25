@@ -68,16 +68,3 @@ def db_limits():
 
     conn.close()
     return limits
-
-def write_predict_db( time, predictValue):
-    conn = sqlite3.connect('extcaland.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT max(IdParameterValue) FROM ParameterValues")
-    maxIndex = cursor.fetchall()
-
-    cursor.execute("SELECT IdParameter, ParameterCode ,IdParameterType FROM Parameters")
-    par = cursor.fetchall()
-    params = []
-    for el in par:
-        if el[1].split('.')[-1] == 'predict':
-            params.append(el)
