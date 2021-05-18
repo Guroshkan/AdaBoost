@@ -1,64 +1,52 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.8.7 (tags/v3.8.7:6503f05, Dec 21 2020, 17:59:51) [MSC v.1928 64 bit (AMD64)]
+# Embedded file name: C:\Users\acer nitro 5\PycharmProjects\AdaBoostVisualDemo lib\DataProcess.py
+# Compiled at: 2021-05-08 03:36:16
+# Size of source mod 2**32: 2970 bytes
 import numpy as np
 
-
 class DataProcess:
-    # создание матрицы данных для обучения
-    def build_2D_list(self, params, defect, limit, df, y):
-        arr = {}
-        for i in range(len(params)):
-            arr[params[i][0]] = np.array(df[params[i][0]])
-        x = []
-        for i in range(len(arr[params[0][0]])):
-            xi = []
-            for j in range(len(params)):
-                value = arr[params[j][0]][i]
-                if value < limit[params[j][0]][0]:
-                    value = limit[params[j][0]][0]
-                if value > limit[params[j][0]][1] :
-                    value = limit[params[j][0]][1]
-                xi.append(value)
-            x.append(xi)
 
+    def normilize_y(self, limit, y):
+        defect = list(y.keys())
         for dfct in defect:
+            y[dfct] = np.array(y[dfct])
             for i in range(len(y)):
                 if y[dfct][i] < limit[dfct][0]:
                     y[dfct][i] = limit[defect][0]
-                if y[dfct][i] > limit[dfct][1]:
-                    y[dfct][i] = limit[defect][1]
-        return np.array(x), y
+            else:
+                return y
 
-    # заполнение пропусков данных параметров предыдущими значениями
     def build_list(self, array):
         res = []
         for i in range(len(array)):
-            if i > 3500:
-                q = array[i]
             if array[i] == '               ' or str(array[i]) == 'nan' or array[i] == float('nan'):
                 res.append(np.float64('nan'))
             else:
-
                 res.append(np.float64(str(array[i]).replace(',', '.')))
-        res = np.array(res)
-        value = 0
-        for i in range(len(res)):
-            if ~np.isnan(res[i]):
-                value = res[i]
-                break
-        for i in range(len(res)):
-            if np.isnan(res[i]):
-                res[i] = value
-            else:
-                value = res[i]
-        return res
+        else:
+            res = np.array(res)
+            value = 0
+            for i in range(len(res)):
+                if ~np.isnan(res[i]):
+                    value = res[i]
+                    break
+                for i in range(len(res)):
+                    if np.isnan(res[i]):
+                        res[i] = value
+                    else:
+                        value = res[i]
+                else:
+                    return res
 
     def getScore(self, expert, model, mod='F', betta=1):
-
         if mod == 'st':
             count = 0
             for i in range(len(expert)):
                 if model[i] == expert[i]:
                     count += 1
-            return count/len(expert)
+            return count / len(expert)
         elif mod == 'e1':
             count = 0
             for i in range(len(expert)):
@@ -83,19 +71,34 @@ class DataProcess:
                 if model[i] == 1 and expert[i] == 1:
                     TP += 1
 
-            if mod =='F':
+            if mod == 'F':
                 precision = TP / max((TP + FP), 1)
                 recall = TP / max((TP + FN), 1)
                 try:
-                    F = (betta**2+1)*(precision*recall)/(betta**2*precision+recall)
-                    return F
+                    F = (betta ** 2 + 1) * (precision * recall) / (betta ** 2 * precision + recall)
+                    return abs(F)
                 except:
                     return 0
             elif mod == 'KKM':
                 try:
-                    KKM = (TP*TN-FP*FN)/((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))**0.5
-                    return KKM
+                    KKM = (TP * TN - FP * FN) / ((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) ** 0.5
+                    return abs(KKM)
                 except:
                     return 0
         else:
             return None
+
+def struct_string( string, lenth = 50):
+    if len(string) <= lenth:
+        return string
+    list_strings = string.split(' ')
+    row_string = str()
+    result_string = str()
+    for word in list_strings:
+        if len(row_string) + len(word) <= lenth:
+            row_string += f' {word}'
+        else:
+            result_string += f' {row_string} \n'
+            row_string = word
+    result_string += f' {row_string} \n'
+    return result_string
