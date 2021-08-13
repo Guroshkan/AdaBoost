@@ -1,10 +1,3 @@
-# uncompyle6 version 3.7.4
-# Python bytecode 3.8 (3413)
-# Decompiled from: Python 3.8.7 (tags/v3.8.7:6503f05, Dec 21 2020, 17:59:51) [MSC v.1928 64 bit (AMD64)]
-# Embedded file name: C:\Users\acer nitro 5\PycharmProjects\AdaBoostVisualDemo lib\MyWindow.py
-# Compiled at: 2021-05-10 06:48:18
-# Size of source mod 2**32: 53409 bytes
-import Language
 from design import *
 from DataProcess import *
 import threading
@@ -785,18 +778,7 @@ class MyWin(QtWidgets.QMainWindow):
             else:
                 i += 1
         self.defects = defect
-        # min_list = [float('inf')] * len(self.params)
-        # max_list = [0] * len(self.params)
-        # for row_ind in range(len(self.x)):
-        #     for col_ind in range(len(self.x[row_ind])):
-        #         min_list[col_ind] = min(min_list[col_ind], self.x[row_ind][col_ind])
-        #         max_list[col_ind] = max(max_list[col_ind], self.x[row_ind][col_ind])
-        # par_ind = 0
-        # while par_ind < len(self.params):
-        #     if max_list[par_ind] == max_list[par_ind]:
-        #         self.params.remove(self.params[par_ind])
-        #     else:
-        #         par_ind += 1
+        
 
     def save_model(self):
         write_model_db(self.adaboost, self.adaboost.count_enumerators, self.adaboost.id_defect,
